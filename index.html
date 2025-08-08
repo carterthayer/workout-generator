@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Training-Max Workout Generator</title>
+  <style>
+    :root{--bg:#0f1724;--card:#0b1220;--muted:#94a3b8;--accent:#38bdf8;color-scheme:dark}
+    body{font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial; background:linear-gradient(180deg,#071024 0%, #071827 100%);color:#e6eef8;margin:0;padding:24px}
+    .container{max-width:980px;margin:0 auto}
+    h1{margin:0 0 12px;font-size:20px}
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+    .card{background:rgba(255,255,255,0.02);padding:12px;border-radius:10px;border:1px solid rgba(255,255,255,0.03)}
+    label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px}
+    input[type=text],select{width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.06);background:transparent;color:inherit}
+    button{background:var(--accent);border:0;padding:10px 14px;border-radius:8px;color:#042024;cursor:pointer;font-weight:600}
+    pre{white-space:pre-wrap;background:rgba(0,0,0,0.25);padding:10px;border-radius:8px;overflow:auto}
+    .small{font-size:13px;color:var(--muted)}
+    .controls{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+    .output{margin-top:16px}
+    .copy{background:#0ea5a4;color:#002020}
+    footer{margin-top:20px;color:var(--muted);font-size:13px}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Training-Max Workout Generator</h1>
+    <p class="small">Enter your training maxes and select the day/week to view that specific plan.</p>
+
+    <div class="grid">
+      <div class="card">
+        <label>Training Maxes</label>
+        <div class="grid">
+          <div>
+            <label>Squat TM</label>
+            <input id="tm_squat" type="text" value="315" />
+          </div>
+          <div>
+            <label>Bench TM</label>
+            <input id="tm_bench" type="text" value="235" />
+          </div>
+          <div>
+            <label>Overhead Press TM</label>
+            <input id="tm_ohp" type="text" value="155" />
+          </div>
+          <div>
+            <label>Deadlift TM</label>
+            <input id="tm_deadlift" type="text" value="385" />
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <label>Week/Day</label>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <div>
+            <label>Select Week</label>
+            <select id="weekSelect">
+              <option value="1">Week 1</option>
+              <option value="2">Week 2</option>
+              <option value="3">Week 3</option>
+            </select>
+          </div>
+          <div>
+            <label>Select Day</label>
+            <select id="daySelect">
+              <option value="monday">Monday</option>
+              <option value="tuesday">Tuesday</option>
+              <option value="thursday">Thursday</option>
+              <option value="friday">Friday</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <label>Options</label>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <div>
+            <label>Rounding increment</label>
+            <select id="rounding"><option value="5">5</option><option value="2.5">2.5</option><option value="1">1</option></select>
+          </div>
+          <div>
+            <label>Prefer rounding</label>
+            <select id="roundDir"><option value="nearest">Nearest</option><option value="down">Round Down</option><option value="up">Round Up</option></select>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <label>Actions</label>
+        <div class="controls">
+          <button id="generate">Generate Plan</button>
+          <button id="copy" class="copy">Copy Text</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="output card" id="outputCard">
+      <h2 style="margin-top:0">Generated Plan</h2>
+      <pre id="output">No plan generated yet.</pre>
+    </div>
+
+    <footer>Now displays one specific day/week at a time with weekdays labeled.</footer>
+  </div>
+
+<script>
+const planSpec = {
+  mainWarmup: [{reps:5,pct:0.40},{reps:5,pct:0.50},{reps:3,pct:0.60}],
+  mainWeeks: [
+    [{reps:5,pct:0.65},{reps:5,pct:0.75},{reps:'5+',pct:0.85}],
+    [{reps:3,pct:0.70},{reps:3,pct:0.80},{reps:'3+',pct:0.90}],
+    [{reps:5,pct:0.75},{reps:3,pct:0.85},{reps:'1+',pct:0.95}]
+  ],
+  secondaryWarmup: [{reps:5,pct:0.40}],
+  secondaryWeeks: [
+    {sets:5,reps:5,pct:0.65},
+    {sets:5,reps:5,pct:0.70},
+    {sets:5,reps:5,pct:0.75}
+  ],
+  assistance: {sets:3,repsRange:'10-15',notes:'Move up in weight when you can thoroughly do 15 for all 3 sets'}
+}
+function toNumber(v){if(v===null||v==='')return null; return parseFloat(v)}
+function roundTo(x,inc,mode){if(mode==='nearest') return Math.max(Math.round(x/inc)*inc, 45); if(mode==='down') return Math.max(Math.floor(x/inc)*inc, 45); return Math.max(Math.ceil(x/inc)*inc, 45)}
+function buildMain(lift,tm,week,rounding,roundDir,units){
+  let lines=[`${lift} — TM: ${tm} ${units}`,'Warm up:'];
+  planSpec.mainWarmup.forEach(w=>lines.push(`  * ${w.reps} reps @ ${Math.round(w.pct*100)}% = ${roundTo(tm*w.pct,rounding,roundDir)} ${units}`));
+  lines.push(`Week ${week}`);
+  planSpec.mainWeeks[week-1].forEach(s=>lines.push(`  * ${s.reps} reps @ ${Math.round(s.pct*100)}% = ${roundTo(tm*s.pct,rounding,roundDir)} ${units}`));
+  return lines.join('\n');
+}
+function buildSecondary(lift,tm,week,rounding,roundDir,units){
+  let lines=[`${lift} (secondary) — TM: ${tm} ${units}`,'Warm up:'];
+  planSpec.secondaryWarmup.forEach(w=>lines.push(`  * ${w.reps} reps @ ${Math.round(w.pct*100)}% = ${roundTo(tm*w.pct,rounding,roundDir)} ${units}`));
+  lines.push(`Week ${week}`);
+  const wk=planSpec.secondaryWeeks[week-1];
+  lines.push(`  * ${wk.sets}x${wk.reps} @ ${Math.round(wk.pct*100)}% = ${roundTo(tm*wk.pct,rounding,roundDir)} ${units}`);
+  return lines.join('\n');
+}
+function generatePlan(){
+  const rounding=parseFloat(document.getElementById('rounding').value);
+  const roundDir=document.getElementById('roundDir').value;
+  const units='lb';
+  const week=parseInt(document.getElementById('weekSelect').value);
+  const day=document.getElementById('daySelect').value;
+  const tm_squat=toNumber(document.getElementById('tm_squat').value);
+  const tm_bench=toNumber(document.getElementById('tm_bench').value);
+  const tm_ohp=toNumber(document.getElementById('tm_ohp').value);
+  const tm_deadlift=toNumber(document.getElementById('tm_deadlift').value);
+  let out=[];
+  if(day==='monday'){
+    out.push(buildMain('Squat',tm_squat,week,rounding,roundDir,units));
+    out.push(buildSecondary('Bench Press',tm_bench,week,rounding,roundDir,units));
+    out.push(`Assistance:\n* Lat pulldown — ${planSpec.assistance.sets}x${planSpec.assistance.repsRange}\n* Leg curl — ${planSpec.assistance.sets}x${planSpec.assistance.repsRange}`);
+  } else if(day==='tuesday'){
+    out.push(buildMain('Overhead Press',tm_ohp,week,rounding,roundDir,units));
+    out.push(buildSecondary('Deadlift',tm_deadlift,week,rounding,roundDir,units));
+    out.push(`Assistance:\n* Cable Bicep curl — ${planSpec.assistance.sets}x${planSpec.assistance.repsRange}\n* Face pulls — ${planSpec.assistance.sets}x${planSpec.assistance.repsRange}`);
+  } else if(day==='thursday'){
+    out.push(buildMain('Bench Press',tm_bench,week,rounding,roundDir,units));
+    out.push(buildSecondary('Squat',tm_squat,week,rounding,roundDir,units));
+    out.push(`Assistance:\n* Machine rows — ${planSpec.assistance.sets}x${planSpec.assistance.repsRange}\n* Machine chest press — ${planSpec.assistance.sets}x${planSpec.assistance.repsRange}`);
+  } else if(day==='friday'){
+    out.push(buildMain('Deadlift',tm_deadlift,week,rounding,roundDir,units));
+    out.push(buildSecondary('Overhead Press',tm_ohp,week,rounding,roundDir,units));
+    out.push(`Assistance:\n* Tricep push down — ${planSpec.assistance.sets}x${planSpec.assistance.repsRange}\n* Standing ab crunch — ${planSpec.assistance.sets}x${planSpec.assistance.repsRange}`);
+  }
+  document.getElementById('output').textContent=out.join('\n\n');
+}
+document.getElementById('generate').addEventListener('click',generatePlan);
+document.getElementById('copy').addEventListener('click',()=>navigator.clipboard.writeText(document.getElementById('output').textContent));
+</script>
+</body>
+</html>
+
